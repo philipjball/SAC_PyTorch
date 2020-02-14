@@ -37,13 +37,13 @@ class ReplayPool:
 class SACDataSet(Dataset):
 
     def __init__(self, transitions: Transition):
-        self.states = Transition.state
-        self.actions = Transition.action
-        self.nextstate = Transition.nextstate
-        self.reward = Transition.reward
+        self.states = torch.Tensor(Transition.state)
+        self.actions = torch.Tensor(Transition.action)
+        self.reward = torch.Tensor(Transition.reward)
+        self.nextstate = torch.Tensor(Transition.nextstate)
 
     def __len__(self):
         return len(self.states)
 
     def __getitem__(self, index):
-        return self.states[index], self.actions[index], self.nextstate[index], self.reward[index]
+        return self.states[index], self.actions[index], self.reward[index], self.nextstate[index],
