@@ -26,26 +26,20 @@ def train_agent_model_free(agent, env, update_timestep, seed, log_interval, ep_s
     samples = []
     rewards = []
     n_starts = len(start_states)
+    n_random_actions = 10000
 
     state_filter = MeanStdevFilter(env.env.observation_space.shape[0])
-
-    state_filter.mean = np.zeros(state_filter.shape)
-    state_filter.stdev = np.ones(state_filter.shape)
 
     half = int(np.ceil(len(start_real_states[0]) / 2))
 
     writer = SummaryWriter()
 
     while samples_number < 3e7:
-        # for reset, real_reset in zip(start_states, start_real_states):
         time_step = 0
         env.reset()
-        # state = reset
-        # env.unwrapped.set_state(real_reset[:half], real_reset[half:])
         i_episode += 1
         log_episode += 1
         state = env.reset()
-        # state_filter.update(state)
         done = False
 
         while (not done):
@@ -53,16 +47,17 @@ def train_agent_model_free(agent, env, update_timestep, seed, log_interval, ep_s
             cumulative_update_timestep += 1
             time_step += 1
             samples_number += 1
-            action = agent.get_action(state_filter(state))
+            if samples_number < n_random_actions:
+                action = env.action_space.sample()
+            else:
+                action = agent.get_action(state)
             nextstate, reward, done, _ = env.step(action)
-            agent.replay_pool.push(Transition(state, action, reward, nextstate))
+            agent.replay_pool.push(state, action, reward, nextstate, False)
             state = nextstate
-            # state_filter.update(state)
             running_reward += reward
             # update if it's time
             if cumulative_update_timestep % update_timestep == 0 and cumulative_update_timestep > agent.batchsize:
-                q1_loss, q2_loss, pi_loss, a_loss = agent.optimize(state_filter, update_timestep)
-                cumulative_update_timestep = 0
+                q1_loss, q2_loss, pi_loss, a_loss = agent.optimize(update_timestep)
                 n_updates += 1
                 writer.add_scalar('Loss/Q-func_1', q1_loss, n_updates)
                 writer.add_scalar('Loss/Q-func_2', q2_loss, n_updates)
@@ -77,7 +72,7 @@ def train_agent_model_free(agent, env, update_timestep, seed, log_interval, ep_s
             subset_resets_real = start_real_states[subset_resets_idx]
             avg_length = int(cumulative_log_timestep/log_episode)
             running_reward = int((running_reward/log_episode))
-            eval_reward = evaluate_agent(env, agent, state_filter)
+            eval_reward = evaluate_agent(env, agent)
             writer.add_scalar('Reward/Train', running_reward, cumulative_timestep)
             writer.add_scalar('Reward/Test', eval_reward, cumulative_timestep)
             # actual_reward = test_agent(agent, ensemble_env, memory, ep_steps, subset_resets, subset_resets_real, use_model=False)
@@ -92,13 +87,13 @@ def train_agent_model_free(agent, env, update_timestep, seed, log_interval, ep_s
             running_reward = 0
 
 
-def evaluate_agent(env, agent, state_filter):
+def evaluate_agent(env, agent):
     reward_sum = 0
     for i in range(10):
         done = False
         state = env.reset()
         while (not done):
-            action = agent.get_action(state_filter(state), deterministic=True)
+            action = agent.get_action(state, deterministic=True)
             nextstate, reward, done, _ = env.step(action)
             reward_sum += reward
             state = nextstate
