@@ -1,16 +1,14 @@
 import copy
-import itertools
-import math
-import random
-from collections import deque
 
+import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.distributions import Normal, TransformedDistribution
 from torch.distributions.transforms import AffineTransform, SigmoidTransform
 from torch.utils.data import DataLoader
 
-from utils import SACDataSet, Transition, ReplayPool
+from utils import SACDataSet, ReplayPool
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -40,17 +38,24 @@ class Policy(nn.Module):
         self.action_dim = action_dim
         self.network = MLPNetwork(state_dim, action_dim * 2, hidden_size)
 
-    def forward(self, x):
+    def forward(self, x, get_logprob=False):
         mu_logvar = self.network(x)
         mu, logvar = mu_logvar[:,:self.action_dim], mu_logvar[:,self.action_dim:]
         std = (0.5 * logvar).exp()
         dist = Normal(mu, std)
-        # tanh transform (2 * sigmoid(2x) - 1)
+        # tanh transform is (2 * sigmoid(2x) - 1)
         transforms = [AffineTransform(loc=0, scale=2), SigmoidTransform(), AffineTransform(loc=-1, scale=2)]
         dist = TransformedDistribution(dist, transforms)
         action = dist.rsample()
-        logprob = dist.log_prob(action).sum(dim=1)
-        return action, logprob
+        if get_logprob:
+            logprob = dist.log_prob(action).sum(axis=-1, keepdim=True)
+        else:
+            logprob = None
+            # logprob -= (2*(np.log(2) - action - F.softplus(-2*action))).sum(axis=1)
+            # action = torch.tanh(action)
+        # mean = dist.mean()
+        mean = torch.tanh(mu)
+        return action, logprob, mean
 
 
 class DoubleQFunc(nn.Module):
@@ -85,17 +90,19 @@ class SAC_Agent:
         self.policy = Policy(state_dim, action_dim, hidden_size=hidden_size).to(device)
 
         # aka temperature
-        self.log_alpha = torch.zeros(1, requires_grad=True, device=device)
+        self.log_alpha = torch.zeros(1, requires_grad=True, device=device) - 1.7
 
-        self.q_optimizers = torch.optim.Adam(self.q_funcs.parameters(), lr=lr)
+        self.q_optimizer = torch.optim.Adam(self.q_funcs.parameters(), lr=lr)
         self.policy_optimizer = torch.optim.Adam(self.policy.parameters(), lr=lr)
-        self.temp_optimizer = torch.optim.Adam([self.log_alpha], lr=lr)
+        # self.temp_optimizer = torch.optim.Adam([self.log_alpha], lr=lr)
 
         self.replay_pool = ReplayPool()
     
-    def get_action(self, state):
+    def get_action(self, state, deterministic=False):
         with torch.no_grad():
-            action, _ = self.policy(torch.Tensor(state).view(1,-1).to(device))
+            action, _, mean = self.policy(torch.Tensor(state).view(1,-1).to(device))
+        if deterministic:
+            return mean.squeeze().cpu().numpy()
         return action.squeeze().cpu().numpy()
 
     def update_target(self):
@@ -106,50 +113,60 @@ class SAC_Agent:
     def update_q_functions(self, state_batch, action_batch, reward_batch, nextstate_batch):
         alpha = self.log_alpha.exp().item()
         with torch.no_grad():
-            nextaction_batch, logprobs_batch = self.policy(nextstate_batch)
+            nextaction_batch, logprobs_batch, _ = self.policy(nextstate_batch, get_logprob=True)
             nextsa_batch = torch.cat((nextstate_batch, nextaction_batch), dim=1)
             sa_batch = torch.cat((state_batch, action_batch), dim=1)
             q_t1, q_t2 = self.target_q_funcs(nextsa_batch)
             # take min to mitigate positive bias in q-function training
-            q_targets = torch.min(q_t1, q_t2).squeeze()
-        q_values = torch.cat(self.q_funcs(sa_batch), dim=1)
-        loss = 0.5 * (q_values - (reward_batch + self.gamma * (q_targets - alpha * logprobs_batch)).view(-1,1)).pow(2).mean()
-        self.q_optimizers.zero_grad()
-        loss.backward()
-        self.q_optimizers.step()
+            q_target = torch.min(q_t1, q_t2)
+            value_target = reward_batch.view(-1,1) + self.gamma * (q_target - alpha * logprobs_batch)
+        q_1, q_2 = self.q_funcs(sa_batch)
+        loss_1 = F.mse_loss(q_1, value_target)
+        loss_2 = F.mse_loss(q_2, value_target)
+        return loss_1, loss_2
 
     def update_policy_and_temp(self, state_batch):
         alpha = self.log_alpha.exp().item()
-        action_batch, logprobs_batch = self.policy(state_batch)
+        action_batch, logprobs_batch, _ = self.policy(state_batch, get_logprob=True)
         stateaction_batch = torch.cat((state_batch, action_batch), dim=1)
-        with torch.no_grad():
-            self.q_funcs.eval()
-            q_b1, q_b2 = self.q_funcs(stateaction_batch)
-            qval_batch = torch.min(q_b1, q_b2).squeeze()
-            self.q_funcs.train()
+        q_b1, q_b2 = self.q_funcs(stateaction_batch)
+        qval_batch = torch.min(q_b1, q_b2).squeeze()
         policy_loss = (alpha * logprobs_batch - qval_batch).mean()
-        self.policy_optimizer.zero_grad()
-        policy_loss.backward()
-        self.policy_optimizer.step()
         temp_loss = -self.log_alpha * (logprobs_batch.detach() + self.target_entropy).mean()
-        self.temp_optimizer.zero_grad()
-        temp_loss.backward()
-        self.temp_optimizer.step()
+        # self.temp_optimizer.zero_grad()
+        # temp_loss.backward()
+        # self.temp_optimizer.step()
+        return policy_loss, temp_loss
 
-    def optimize(self, state_filter):
-        train_data = self.replay_pool.get_all()
-        dataset = SACDataSet(train_data, state_filter)
-        dataloader = DataLoader(dataset,
-                        shuffle=True,
-                        batch_size=self.batchsize,
-                        pin_memory=True)
+    def optimize(self, state_filter, n_updates):
+        # total_data_size = n_updates * self.batchsize
+        # dataset = SACDataSet(train_data, state_filter)
+        # dataloader = DataLoader(dataset,
+        #                 shuffle=True,
+        #                 batch_size=self.batchsize,
+        #                 pin_memory=True)
         for _ in range(self.epochs):
-            for i, (state_batch, action_batch, reward_batch, nextstate_batch) in enumerate(dataloader):
+            q1_loss, q2_loss, pi_loss, a_loss = 0, 0, 0, 0
+            for i in range(n_updates):
+                state_batch, action_batch, reward_batch, nextstate_batch = self.replay_pool.filter_sample(self.batchsize, state_filter)
                 state_batch, action_batch, reward_batch, nextstate_batch = state_batch.to(device), action_batch.to(device), reward_batch.to(device), nextstate_batch.to(device)
-                self.update_q_functions(state_batch, action_batch, reward_batch, nextstate_batch)
-                self.update_policy_and_temp(state_batch)
+                q1_loss_step, q2_loss_step = self.update_q_functions(state_batch, action_batch, reward_batch, nextstate_batch)
+                pi_loss_step, a_loss_step = self.update_policy_and_temp(state_batch)
+                
+                self.q_optimizer.zero_grad()
+                q1_loss_step.backward()
+                self.q_optimizer.step()
+                self.q_optimizer.zero_grad()
+                q2_loss_step.backward()
+                self.q_optimizer.step()
+                self.policy_optimizer.zero_grad()
+                pi_loss_step.backward()
+                self.policy_optimizer.step()
+
+                q1_loss += q1_loss_step.detach().item()
+                q2_loss += q2_loss_step.detach().item()
+                pi_loss += pi_loss_step.detach().item()
+                a_loss += a_loss_step.detach().item()
                 if i // self.update_interval == 0:
                     self.update_target()
-
-
-
+        return q1_loss, q2_loss, pi_loss, a_loss       
