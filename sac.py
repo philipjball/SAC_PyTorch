@@ -132,14 +132,18 @@ class SAC_Agent:
         temp_loss = -self.log_alpha * (logprobs_batch.detach() + self.target_entropy).mean()
         return policy_loss, temp_loss
 
-    def optimize(self, n_updates):
+    def optimize(self, n_updates, state_filter=None):
         for _ in range(self.epochs):
             q1_loss, q2_loss, pi_loss, a_loss = 0, 0, 0, 0
             for i in range(n_updates):
                 samples = self.replay_pool.sample(self.batchsize)
 
-                state_batch = torch.FloatTensor(samples.state).to(device)
-                nextstate_batch = torch.FloatTensor(samples.nextstate).to(device)
+                if state_filter:
+                    state_batch = torch.FloatTensor(state_filter(samples.state)).to(device)
+                    nextstate_batch = torch.FloatTensor(state_filter(samples.nextstate)).to(device)
+                else:
+                    state_batch = torch.FloatTensor(samples.state).to(device)
+                    nextstate_batch = torch.FloatTensor(samples.nextstate).to(device)
                 action_batch = torch.FloatTensor(samples.action).to(device)
                 reward_batch = torch.FloatTensor(samples.reward).to(device).unsqueeze(1)
                 
