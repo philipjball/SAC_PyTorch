@@ -1,5 +1,6 @@
 import uuid
 from collections import deque
+import random
 
 import gym
 import numpy as np
@@ -32,6 +33,12 @@ def train_agent_model_free(agent, env, update_timestep, seed, log_interval, ep_s
 
     half = int(np.ceil(len(start_real_states[0]) / 2))
 
+    random.seed(seed)
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    env.seed(seed)
+    env.action_space.np_random.seed(seed)
+
     writer = SummaryWriter()
 
     while samples_number < 3e7:
@@ -52,7 +59,7 @@ def train_agent_model_free(agent, env, update_timestep, seed, log_interval, ep_s
             else:
                 action = agent.get_action(state)
             nextstate, reward, done, _ = env.step(action)
-            agent.replay_pool.push(state, action, reward, nextstate, False)
+            agent.replay_pool.push(Transition(state, action, reward, nextstate))
             state = nextstate
             running_reward += reward
             # update if it's time

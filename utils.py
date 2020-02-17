@@ -1,8 +1,12 @@
 from collections import namedtuple, deque
 import itertools
 import random
+import math
 import numpy as np
 import torch
+from torch.distributions.transforms import Transform
+from torch.nn.functional import softplus
+from torch.distributions import constraints
 from torch.utils.data import DataLoader, Dataset
 
 Transition = namedtuple('Transition', ('state', 'action', 'reward', 'nextstate'))
@@ -91,22 +95,43 @@ class SACDataSet(Dataset):
         return self.states[index], self.actions[index], self.reward[index], self.nextstate[index]
 
 
-class ReplayMemory:
-    def __init__(self, capacity):
-        self.capacity = capacity
-        self.buffer = []
-        self.position = 0
+# Taken from: https://github.com/pytorch/pytorch/pull/19785/files
+# The composition of affine + sigmoid + affine transforms is unstable numerically
+# tanh transform is (2 * sigmoid(2x) - 1)
+# NUMERICALLY UNSTABLE!
+# transforms = [AffineTransform(loc=0, scale=2), SigmoidTransform(), AffineTransform(loc=-1, scale=2)]
+class TanhTransform(Transform):
+    r"""
+    Transform via the mapping :math:`y = \tanh(x)`.
+    It is equivalent to
+    ```
+    ComposeTransform([AffineTransform(0., 2.), SigmoidTransform(), AffineTransform(-1., 2.)])
+    ```
+    However this might not be numerically stable, thus it is recommended to use `TanhTransform`
+    instead.
+    Note that one should use `cache_size=1` when it comes to `NaN/Inf` values.
+    """
+    domain = constraints.real
+    codomain = constraints.interval(-1.0, 1.0)
+    bijective = True
+    sign = +1
 
-    def push(self, state, action, reward, next_state, done):
-        if len(self.buffer) < self.capacity:
-            self.buffer.append(None)
-        self.buffer[self.position] = (state, action, reward, next_state, done)
-        self.position = (self.position + 1) % self.capacity
+    @staticmethod
+    def atanh(x):
+        return 0.5 * (x.log1p() - (-x).log1p())
 
-    def sample(self, batch_size):
-        batch = random.sample(self.buffer, batch_size)
-        state, action, reward, next_state, done = map(np.stack, zip(*batch))
-        return state, action, reward, next_state, done
+    def __eq__(self, other):
+        return isinstance(other, TanhTransform)
 
-    def __len__(self):
-        return len(self.buffer)
+    def _call(self, x):
+        return x.tanh()
+
+    def _inverse(self, y):
+        # We do not clamp to the boundary here as it may degrade the performance of certain algorithms.
+        # one should use `cache_size=1` instead
+        return self.atanh(y)
+
+    def log_abs_det_jacobian(self, x, y):
+        # We use a formula that is more numerically stable, see details in the following link
+        # https://github.com/tensorflow/probability/blob/master/tensorflow_probability/python/bijectors/tanh.py#L69-L80
+        return 2. * (math.log(2.) - x - softplus(-2. * x))

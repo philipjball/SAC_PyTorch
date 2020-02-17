@@ -8,7 +8,7 @@ from torch.distributions import Normal, TransformedDistribution
 from torch.distributions.transforms import AffineTransform, SigmoidTransform
 from torch.utils.data import DataLoader
 
-from utils import SACDataSet, ReplayPool, ReplayMemory
+from utils import SACDataSet, ReplayPool, TanhTransform
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -45,7 +45,9 @@ class Policy(nn.Module):
         std = logstd.exp()
         dist = Normal(mu, std)
         # tanh transform is (2 * sigmoid(2x) - 1)
-        transforms = [AffineTransform(loc=0, scale=2), SigmoidTransform(), AffineTransform(loc=-1, scale=2)]
+        # NUMERICALLY UNSTABLE!
+        # transforms = [AffineTransform(loc=0, scale=2), SigmoidTransform(), AffineTransform(loc=-1, scale=2)]
+        transforms = [TanhTransform(cache_size=1)]
         dist = TransformedDistribution(dist, transforms)
         action = dist.rsample()
         if get_logprob:
@@ -98,7 +100,7 @@ class SAC_Agent:
         self.policy_optimizer = torch.optim.Adam(self.policy.parameters(), lr=lr)
         self.temp_optimizer = torch.optim.Adam([self.log_alpha], lr=lr)
 
-        self.replay_pool = ReplayMemory(int(1e6))
+        self.replay_pool = ReplayPool(capacity=int(1e6))
     
     def get_action(self, state, deterministic=False):
         with torch.no_grad():
@@ -137,12 +139,12 @@ class SAC_Agent:
         for _ in range(self.epochs):
             q1_loss, q2_loss, pi_loss, a_loss = 0, 0, 0, 0
             for i in range(n_updates):
-                state_batch, action_batch, reward_batch, nextstate_batch, _ = self.replay_pool.sample(self.batchsize)
+                samples = self.replay_pool.sample(self.batchsize)
 
-                state_batch = torch.FloatTensor(state_batch).to(device)
-                nextstate_batch = torch.FloatTensor(nextstate_batch).to(device)
-                action_batch = torch.FloatTensor(action_batch).to(device)
-                reward_batch = torch.FloatTensor(reward_batch).to(device).unsqueeze(1)
+                state_batch = torch.FloatTensor(samples.state).to(device)
+                nextstate_batch = torch.FloatTensor(samples.nextstate).to(device)
+                action_batch = torch.FloatTensor(samples.action).to(device)
+                reward_batch = torch.FloatTensor(samples.reward).to(device).unsqueeze(1)
                 
                 q1_loss_step, q2_loss_step = self.update_q_functions(state_batch, action_batch, reward_batch, nextstate_batch)
                 self.q_optimizer.zero_grad()
