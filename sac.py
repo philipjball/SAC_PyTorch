@@ -99,7 +99,9 @@ class SAC_Agent:
 
         self.replay_pool = ReplayPool(capacity=int(1e6))
     
-    def get_action(self, state, deterministic=False):
+    def get_action(self, state, state_filter=None, deterministic=False):
+        if state_filter:
+            state = state_filter(state)
         with torch.no_grad():
             action, _, mean = self.policy(torch.Tensor(state).view(1,-1).to(device))
         if deterministic:

@@ -11,7 +11,7 @@ from torch.utils.tensorboard import SummaryWriter
 from utils import Transition, MeanStdevFilter
 from sac import SAC_Agent
 
-def train_agent_model_free(agent, env, update_timestep, seed, log_interval, ep_steps, start_states, start_real_states):
+def train_agent_model_free(agent, env, update_timestep, seed, log_interval, ep_steps, start_states, start_real_states, use_statefilter=True):
     # logging variables
     running_reward = 0
     running_reward_real = 0
@@ -29,7 +29,10 @@ def train_agent_model_free(agent, env, update_timestep, seed, log_interval, ep_s
     n_starts = len(start_states)
     n_random_actions = 10000
 
-    state_filter = MeanStdevFilter(env.env.observation_space.shape[0])
+    if use_statefilter:
+        state_filter = MeanStdevFilter(env.env.observation_space.shape[0])
+    else:
+        state_filter = None
 
     half = int(np.ceil(len(start_real_states[0]) / 2))
 
@@ -47,7 +50,8 @@ def train_agent_model_free(agent, env, update_timestep, seed, log_interval, ep_s
         i_episode += 1
         log_episode += 1
         state = env.reset()
-        state_filter.update(state)
+        if state_filter:
+            state_filter.update(state)
         done = False
 
         while (not done):
@@ -58,11 +62,12 @@ def train_agent_model_free(agent, env, update_timestep, seed, log_interval, ep_s
             if samples_number < n_random_actions:
                 action = env.action_space.sample()
             else:
-                action = agent.get_action(state_filter(state))
+                action = agent.get_action(state, state_filter=state_filter)
             nextstate, reward, done, _ = env.step(action)
             agent.replay_pool.push(Transition(state, action, reward, nextstate))
             state = nextstate
-            state_filter.update(state)
+            if state_filter:
+                state_filter.update(state)
             running_reward += reward
             # update if it's time
             if cumulative_update_timestep % update_timestep == 0 and cumulative_update_timestep > agent.batchsize:
@@ -98,15 +103,15 @@ def train_agent_model_free(agent, env, update_timestep, seed, log_interval, ep_s
 
 def evaluate_agent(env, agent, state_filter):
     reward_sum = 0
-    for i in range(10):
+    for _ in range(10):
         done = False
         state = env.reset()
         while (not done):
-            action = agent.get_action(state_filter(state), deterministic=True)
+            action = agent.get_action(state, state_filter=state_filter, deterministic=True)
             nextstate, reward, done, _ = env.step(action)
             reward_sum += reward
             state = nextstate
-    return reward_sum / 10           
+    return reward_sum / 10
 
 
 def main():
