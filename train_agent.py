@@ -1,6 +1,7 @@
-import uuid
-from collections import deque
 import random
+import uuid
+from argparse import ArgumentParser
+from collections import deque
 
 import gym
 import numpy as np
@@ -8,13 +9,13 @@ import pandas as pd
 import torch
 from torch.utils.tensorboard import SummaryWriter
 
-from utils import Transition, MeanStdevFilter
 from sac import SAC_Agent
+from utils import MeanStdevFilter, Transition
 
-def train_agent_model_free(agent, env, update_timestep, seed, log_interval, ep_steps, start_states, start_real_states, use_statefilter=True):
+
+def train_agent_model_free(agent, env, update_timestep, seed, log_interval, ep_steps=1000, n_random_actions=10000, use_statefilter=False):
     # logging variables
     running_reward = 0
-    running_reward_real = 0
     avg_length = 0
     time_step = 0
     cumulative_timestep = 0
@@ -25,16 +26,11 @@ def train_agent_model_free(agent, env, update_timestep, seed, log_interval, ep_s
     log_episode = 0
     samples_number = 0
     samples = []
-    rewards = []
-    n_starts = len(start_states)
-    n_random_actions = 10000
 
     if use_statefilter:
         state_filter = MeanStdevFilter(env.env.observation_space.shape[0])
     else:
         state_filter = None
-
-    half = int(np.ceil(len(start_real_states[0]) / 2))
 
     random.seed(seed)
     torch.manual_seed(seed)
@@ -81,21 +77,13 @@ def train_agent_model_free(agent, env, update_timestep, seed, log_interval, ep_s
         cumulative_timestep += time_step
         # logging
         if i_episode % log_interval == 0:
-            subset_resets_idx = np.random.randint(0, n_starts, 10)
-            subset_resets = start_states[subset_resets_idx]
-            subset_resets_real = start_real_states[subset_resets_idx]
             avg_length = int(cumulative_log_timestep/log_episode)
             running_reward = int((running_reward/log_episode))
             eval_reward = evaluate_agent(env, agent, state_filter)
             writer.add_scalar('Reward/Train', running_reward, cumulative_timestep)
             writer.add_scalar('Reward/Test', eval_reward, cumulative_timestep)
-            # actual_reward = test_agent(agent, ensemble_env, memory, ep_steps, subset_resets, subset_resets_real, use_model=False)
             samples.append(samples_number)
-            # rewards.append(actual_reward)
-            print('Episode {} \t Samples {} \t Avg length: {} \t Avg reward: {} \t Number of Policy Updates: {}'.format(i_episode, samples_number, avg_length, running_reward, n_updates))
-            # print('Episode {} \t Samples {} \t Avg length: {} \t Avg reward: {} \t Actual reward: {} \t Number of Policy Updates: {}'.format(i_episode, samples_number, avg_length, running_reward, actual_reward, n_updates))
-            # df = pd.DataFrame({'Samples': samples, 'Reward': rewards})
-            # df.to_csv("{}.csv".format(env_name + '-ModelFree-Seed-' + str(seed)))
+            print('Episode {} \t Samples {} \t Avg length: {} \t Test reward: {} \t Train reward: {} \t Number of Policy Updates: {}'.format(i_episode, samples_number, avg_length, eval_reward, running_reward, n_updates))
             cumulative_log_timestep = 0
             log_episode = 0
             running_reward = 0
@@ -115,27 +103,31 @@ def evaluate_agent(env, agent, state_filter):
 
 
 def main():
+    
+    parser = ArgumentParser()
+    parser.add_argument('--env', type=str, default='HalfCheetah-v2')
+    parser.add_argument('--seed', type=int, default=100)
+    parser.add_argument('--use_obs_filter', dest='obs_filter', action='store_true')
+    parser.add_argument('--update_every_n_steps', type=1, default=1)
+    parser.set_defaults(obs_filter=False)
 
-    seed = 100
+    args = parser.parse_args()
+    params = vars(args)
 
-    env = gym.make('HalfCheetah-v2')
+    seed = params['seed']
+    env = gym.make(params['env'])
     
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.shape[0]
 
     agent = SAC_Agent(seed, state_dim, action_dim)
 
-    env_resets = []
-    env_resets_real = []
-
-    for _ in range(1):
-        env_resets.append(env.reset())
-        env_resets_real.append(env.unwrapped.state_vector())
-    
-    env_resets = np.array(env_resets)
-    env_resets_real = np.array(env_resets_real)
-
-    train_agent_model_free(agent, env, 1, seed, 10, 1000, env_resets, env_resets_real)
+    train_agent_model_free(agent=agent,
+                            env=env, 
+                            update_timestep=params['update_every_n_steps'],
+                            seed=seed,
+                            log_interval=10,
+                            use_statefilter=params['obs_filter'])
 
 
 if __name__ == '__main__':
