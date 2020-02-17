@@ -44,9 +44,6 @@ class Policy(nn.Module):
         logstd = torch.clamp(logstd, -20, 2)
         std = logstd.exp()
         dist = Normal(mu, std)
-        # tanh transform is (2 * sigmoid(2x) - 1)
-        # NUMERICALLY UNSTABLE!
-        # transforms = [AffineTransform(loc=0, scale=2), SigmoidTransform(), AffineTransform(loc=-1, scale=2)]
         transforms = [TanhTransform(cache_size=1)]
         dist = TransformedDistribution(dist, transforms)
         action = dist.rsample()
@@ -146,14 +143,14 @@ class SAC_Agent:
                 action_batch = torch.FloatTensor(samples.action).to(device)
                 reward_batch = torch.FloatTensor(samples.reward).to(device).unsqueeze(1)
                 
+                # update q-funcs
                 q1_loss_step, q2_loss_step = self.update_q_functions(state_batch, action_batch, reward_batch, nextstate_batch)
+                q_loss_step = q1_loss_step + q2_loss_step
                 self.q_optimizer.zero_grad()
-                q1_loss_step.backward()
-                self.q_optimizer.step()
-                self.q_optimizer.zero_grad()
-                q2_loss_step.backward()
+                q_loss_step.backward()
                 self.q_optimizer.step()
 
+                # update policy and temperature parameter
                 pi_loss_step, a_loss_step = self.update_policy_and_temp(state_batch)
                 self.policy_optimizer.zero_grad()
                 pi_loss_step.backward()
@@ -170,4 +167,4 @@ class SAC_Agent:
                 a_loss += a_loss_step.detach().item()
                 if i // self.update_interval == 0:
                     self.update_target()
-        return q1_loss, q2_loss, pi_loss, a_loss       
+        return q1_loss, q2_loss, pi_loss, a_loss
