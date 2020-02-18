@@ -4,6 +4,7 @@ from argparse import ArgumentParser
 from collections import deque
 
 import gym
+from gym.wrappers import RescaleAction
 import numpy as np
 import pandas as pd
 import torch
@@ -123,13 +124,12 @@ def main():
 
     seed = params['seed']
     env = gym.make(params['env'])
-    # assume symmetric and uniform action scaling
-    action_scale = env.action_space.high[0] if env.action_space.high[0] != 1 else None
+    env = RescaleAction(env, -1, 1)
 
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.shape[0]
 
-    agent = SAC_Agent(seed, state_dim, action_dim, action_scale=action_scale)
+    agent = SAC_Agent(seed, state_dim, action_dim)
 
     train_agent_model_free(agent=agent,
                             env=env, 

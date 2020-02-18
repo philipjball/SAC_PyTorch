@@ -67,14 +67,13 @@ class DoubleQFunc(nn.Module):
 
 class SAC_Agent:
 
-    def __init__(self, seed, state_dim, action_dim, action_scale=None, lr=3e-4, gamma=0.99, epochs=1, tau=5e-3, batchsize=256, hidden_size=256, update_interval=1):
+    def __init__(self, seed, state_dim, action_dim, lr=3e-4, gamma=0.99, epochs=1, tau=5e-3, batchsize=256, hidden_size=256, update_interval=1):
         self.gamma = gamma
         self.epochs = epochs
         self.tau = tau
         self.target_entropy = -action_dim
         self.batchsize = batchsize
         self.update_interval = update_interval
-        self.action_scale = action_scale
 
         torch.manual_seed(seed)
 
@@ -103,8 +102,6 @@ class SAC_Agent:
             state = state_filter(state)
         with torch.no_grad():
             action, _, mean = self.policy(torch.Tensor(state).view(1,-1).to(device))
-        if self.action_scale:
-            action, mean = action * self.action_scale, mean * self.action_scale
         if deterministic:
             return mean.squeeze().cpu().numpy()
         return action.squeeze().cpu().numpy()
