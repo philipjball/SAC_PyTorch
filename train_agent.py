@@ -108,7 +108,7 @@ def main():
     parser.add_argument('--env', type=str, default='HalfCheetah-v2')
     parser.add_argument('--seed', type=int, default=100)
     parser.add_argument('--use_obs_filter', dest='obs_filter', action='store_true')
-    parser.add_argument('--update_every_n_steps', type=1, default=1)
+    parser.add_argument('--update_every_n_steps', type=int, default=1)
     parser.set_defaults(obs_filter=False)
 
     args = parser.parse_args()
