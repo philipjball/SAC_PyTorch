@@ -26,8 +26,5 @@ Gets the insane HalfCheetah result, tops out around 17,000:
 
 * Tidy up gradients to make code run even quicker
 * Play around with different approaches to make learning faster (i.e., varying how often we train, parallelisation)
-* Deal with envs that have early termination (not due to time limits)
-* Deal with envs that have an action range that is not in the interval (-1,1)
 * Test on other environments
-* Make Gifs by adding visualisations
 * Add Model saving/checkpointing

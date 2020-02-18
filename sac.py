@@ -5,10 +5,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Normal, TransformedDistribution
-from torch.distributions.transforms import AffineTransform, SigmoidTransform
-from torch.utils.data import DataLoader
 
-from utils import SACDataSet, ReplayPool, TanhTransform
+from utils import ReplayPool, TanhTransform
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -69,13 +67,14 @@ class DoubleQFunc(nn.Module):
 
 class SAC_Agent:
 
-    def __init__(self, seed, state_dim, action_dim, lr=3e-4, gamma=0.99, epochs=1, tau=5e-3, batchsize=256, hidden_size=256, update_interval=1):
+    def __init__(self, seed, state_dim, action_dim, action_scale=None, lr=3e-4, gamma=0.99, epochs=1, tau=5e-3, batchsize=256, hidden_size=256, update_interval=1):
         self.gamma = gamma
         self.epochs = epochs
         self.tau = tau
         self.target_entropy = -action_dim
         self.batchsize = batchsize
         self.update_interval = update_interval
+        self.action_scale = action_scale
 
         torch.manual_seed(seed)
 
@@ -104,6 +103,8 @@ class SAC_Agent:
             state = state_filter(state)
         with torch.no_grad():
             action, _, mean = self.policy(torch.Tensor(state).view(1,-1).to(device))
+        if self.action_scale:
+            action, mean = action * self.action_scale, mean * self.action_scale
         if deterministic:
             return mean.squeeze().cpu().numpy()
         return action.squeeze().cpu().numpy()
@@ -114,13 +115,13 @@ class SAC_Agent:
             for target_q_param, q_param in zip(self.target_q_funcs.parameters(), self.q_funcs.parameters()):
                 target_q_param.data.copy_(self.tau * q_param.data + (1.0 - self.tau) * target_q_param.data)
 
-    def update_q_functions(self, state_batch, action_batch, reward_batch, nextstate_batch):
+    def update_q_functions(self, state_batch, action_batch, reward_batch, nextstate_batch, done_batch):
         with torch.no_grad():
             nextaction_batch, logprobs_batch, _ = self.policy(nextstate_batch, get_logprob=True)
             q_t1, q_t2 = self.target_q_funcs(nextstate_batch, nextaction_batch)
             # take min to mitigate positive bias in q-function training
             q_target = torch.min(q_t1, q_t2)
-            value_target = reward_batch + self.gamma * (q_target - self.alpha * logprobs_batch)
+            value_target = reward_batch + (1.0 - done_batch) * self.gamma * (q_target - self.alpha * logprobs_batch)
         q_1, q_2 = self.q_funcs(state_batch, action_batch)
         loss_1 = F.mse_loss(q_1, value_target)
         loss_2 = F.mse_loss(q_2, value_target)
@@ -148,9 +149,10 @@ class SAC_Agent:
                     nextstate_batch = torch.FloatTensor(samples.nextstate).to(device)
                 action_batch = torch.FloatTensor(samples.action).to(device)
                 reward_batch = torch.FloatTensor(samples.reward).to(device).unsqueeze(1)
+                done_batch = torch.FloatTensor(samples.done).to(device).unsqueeze(1)
                 
                 # update q-funcs
-                q1_loss_step, q2_loss_step = self.update_q_functions(state_batch, action_batch, reward_batch, nextstate_batch)
+                q1_loss_step, q2_loss_step = self.update_q_functions(state_batch, action_batch, reward_batch, nextstate_batch, done_batch)
                 q_loss_step = q1_loss_step + q2_loss_step
                 self.q_optimizer.zero_grad()
                 q_loss_step.backward()

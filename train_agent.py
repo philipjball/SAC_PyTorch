@@ -10,10 +10,10 @@ import torch
 from torch.utils.tensorboard import SummaryWriter
 
 from sac import SAC_Agent
-from utils import MeanStdevFilter, Transition
+from utils import MeanStdevFilter, Transition, make_gif
 
 
-def train_agent_model_free(agent, env, update_timestep, seed, log_interval, ep_steps=1000, n_random_actions=10000, use_statefilter=False):
+def train_agent_model_free(agent, env, update_timestep, seed, log_interval, gif_interval, ep_steps=1000, n_random_actions=10000, use_statefilter=False):
     # logging variables
     running_reward = 0
     avg_length = 0
@@ -38,6 +38,8 @@ def train_agent_model_free(agent, env, update_timestep, seed, log_interval, ep_s
     env.seed(seed)
     env.action_space.np_random.seed(seed)
 
+    max_steps = env.spec.max_episode_steps
+
     writer = SummaryWriter()
 
     while samples_number < 3e7:
@@ -60,7 +62,9 @@ def train_agent_model_free(agent, env, update_timestep, seed, log_interval, ep_s
             else:
                 action = agent.get_action(state, state_filter=state_filter)
             nextstate, reward, done, _ = env.step(action)
-            agent.replay_pool.push(Transition(state, action, reward, nextstate))
+            # if we hit the time-limit, it's not a 'real' done; we don't want to assign low value to those states
+            real_done = False if time_step == max_steps else done
+            agent.replay_pool.push(Transition(state, action, reward, nextstate, real_done))
             state = nextstate
             if state_filter:
                 state_filter.update(state)
@@ -87,11 +91,13 @@ def train_agent_model_free(agent, env, update_timestep, seed, log_interval, ep_s
             cumulative_log_timestep = 0
             log_episode = 0
             running_reward = 0
+        if i_episode % gif_interval == 0:
+            make_gif(agent, env, cumulative_timestep, state_filter)
 
 
-def evaluate_agent(env, agent, state_filter):
+def evaluate_agent(env, agent, state_filter, n_starts=10):
     reward_sum = 0
-    for _ in range(10):
+    for _ in range(n_starts):
         done = False
         state = env.reset()
         while (not done):
@@ -99,7 +105,7 @@ def evaluate_agent(env, agent, state_filter):
             nextstate, reward, done, _ = env.step(action)
             reward_sum += reward
             state = nextstate
-    return reward_sum / 10
+    return reward_sum / n_starts
 
 
 def main():
@@ -109,6 +115,7 @@ def main():
     parser.add_argument('--seed', type=int, default=100)
     parser.add_argument('--use_obs_filter', dest='obs_filter', action='store_true')
     parser.add_argument('--update_every_n_steps', type=int, default=1)
+    parser.add_argument('--n_random_actions', type=int, default=10000)
     parser.set_defaults(obs_filter=False)
 
     args = parser.parse_args()
@@ -116,17 +123,21 @@ def main():
 
     seed = params['seed']
     env = gym.make(params['env'])
-    
+    # assume symmetric and uniform action scaling
+    action_scale = env.action_space.high[0] if env.action_space.high[0] != 1 else None
+
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.shape[0]
 
-    agent = SAC_Agent(seed, state_dim, action_dim)
+    agent = SAC_Agent(seed, state_dim, action_dim, action_scale=action_scale)
 
     train_agent_model_free(agent=agent,
                             env=env, 
                             update_timestep=params['update_every_n_steps'],
                             seed=seed,
                             log_interval=10,
+                            gif_interval=100,
+                            n_random_actions=params['n_random_actions'],
                             use_statefilter=params['obs_filter'])
 
 
