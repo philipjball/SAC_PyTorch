@@ -18,9 +18,9 @@ for default args. Changeable args are:
 
 ## Results
 
-Gets the insane HalfCheetah result:
+Gets the insane HalfCheetah result, tops out around 17,000:
 
-![example](./assets/HC-reward.PNG)
+![example](./assets/HalfCheetah.png)
 
 ## TODO
 
@@ -29,4 +29,5 @@ Gets the insane HalfCheetah result:
 * Deal with envs that have early termination (not due to time limits)
 * Deal with envs that have an action range that is not in the interval (-1,1)
 * Test on other environments
-* Make Gifs
+* Make Gifs by adding visualisations
+* Add Model saving/checkpointing
