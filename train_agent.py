@@ -19,7 +19,7 @@ def train_agent_model_free(agent, env, params):
     update_timestep=params['update_every_n_steps']
     seed=params['seed']
     log_interval=1000
-    gif_interval=1000
+    gif_interval=500000
     n_random_actions=params['n_random_actions']
     use_statefilter=params['obs_filter']
     save_model = params['save_model']

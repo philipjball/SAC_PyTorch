@@ -9,7 +9,6 @@ from torch.distributions import Normal, TransformedDistribution
 from utils import ReplayPool, TanhTransform
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-# device = "cpu"
 
 
 class MLPNetwork(nn.Module):
