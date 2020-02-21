@@ -98,7 +98,7 @@ def train_agent_model_free(agent, env, params):
                 episode_steps = []
                 running_reward = []
             if cumulative_timestep % gif_interval == 0:
-                # make_gif(agent, env, cumulative_timestep, state_filter)
+                make_gif(agent, env, cumulative_timestep, state_filter)
                 if save_model:
                     make_checkpoint(agent, cumulative_timestep, params['env'])
 
