@@ -9,6 +9,7 @@ from torch.distributions import Normal, TransformedDistribution
 from utils import ReplayPool, TanhTransform
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+# device = "cpu"
 
 
 class MLPNetwork(nn.Module):
@@ -38,7 +39,7 @@ class Policy(nn.Module):
 
     def forward(self, x, get_logprob=False):
         mu_logstd = self.network(x)
-        mu, logstd = mu_logstd[:,:self.action_dim], mu_logstd[:,self.action_dim:]
+        mu, logstd = mu_logstd.chunk(2, dim=1)
         logstd = torch.clamp(logstd, -20, 2)
         std = logstd.exp()
         dist = Normal(mu, std)
@@ -156,6 +157,8 @@ class SAC_Agent:
                 self.q_optimizer.step()
 
                 # update policy and temperature parameter
+                for p in self.q_funcs.parameters():
+                    p.requires_grad = False
                 pi_loss_step, a_loss_step = self.update_policy_and_temp(state_batch)
                 self.policy_optimizer.zero_grad()
                 pi_loss_step.backward()
@@ -163,6 +166,8 @@ class SAC_Agent:
                 self.temp_optimizer.zero_grad()
                 a_loss_step.backward()
                 self.temp_optimizer.step()
+                for p in self.q_funcs.parameters():
+                    p.requires_grad = True
 
                 self.alpha = self.log_alpha.exp()
 

@@ -14,6 +14,8 @@ for default args. Changeable args are:
 --seed: Int of seed (Default: 100)
 --use_obs_filter: Boolean that is true when used (seems to degrade performance)
 --update_every_n_steps: Int of how many env steps we take before optimizing the agent (Default: 1)
+--n_random_actions: Int of how many random steps we take to 'seed' the replay pool (Default: 10000)
+--save_model: Boolean that is true when used (saves model when GIFs are made, loading and running is left as an exercise for the reader (or until I get around to it))
 ```
 
 ## Results
@@ -21,10 +23,3 @@ for default args. Changeable args are:
 Gets the insane HalfCheetah result, tops out around 17,000:
 
 ![example](./assets/HalfCheetah.png)
-
-## TODO
-
-* Tidy up gradients to make code run even quicker
-* Play around with different approaches to make learning faster (i.e., varying how often we train, parallelisation)
-* Test on other environments
-* Add Model saving/checkpointing

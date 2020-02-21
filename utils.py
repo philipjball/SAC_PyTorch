@@ -1,5 +1,6 @@
 import itertools
 import math
+import os
 import random
 from collections import deque, namedtuple
 
@@ -135,15 +136,22 @@ def make_gif(policy, env, step_count, state_filter, maxsteps=1000):
         t +=1
     print('Final reward :', np.sum(rewards))
     clip = ImageSequenceClip(steps, fps=30)
+    if not os.path.isdir('gifs'):
+        os.makedirs('gifs')
     clip.write_gif('gifs/{}.gif'.format(gif_name), fps=30)
 
 
-def save_model(agent, step_count):
-    double_q, target_double_q, policy, log_alpha = agent.double_q, agent.target_double_q, agent.policy, agent.log_alpha
+def make_checkpoint(agent, step_count, env_name):
+    q_funcs, target_q_funcs, policy, log_alpha = agent.q_funcs, agent.target_q_funcs, agent.policy, agent.log_alpha
     
+    save_path = "checkpoints/model-{}.pt".format(step_count)
+
+    if not os.path.isdir('checkpoints'):
+        os.makedirs('checkpoints')
+
     torch.save({
-        'double_q_state_dict': double_q.state_dict(),
-        'target_double_q_state_dict': target_double_q.state_dict(),
+        'double_q_state_dict': q_funcs.state_dict(),
+        'target_double_q_state_dict': target_q_funcs.state_dict(),
         'policy_state_dict': policy.state_dict(),
-        'log_alpha_state_dict': log_alpha.state_dict()
-    }, )
+        'log_alpha_state_dict': log_alpha
+    }, save_path)
