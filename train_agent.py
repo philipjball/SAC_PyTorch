@@ -16,13 +16,17 @@ from utils import MeanStdevFilter, Transition, make_gif, make_checkpoint
 
 def train_agent_model_free(agent, env, params):
     
-    update_timestep=params['update_every_n_steps']
-    seed=params['seed']
-    log_interval=1000
-    gif_interval=500000
-    n_random_actions=params['n_random_actions']
-    use_statefilter=params['obs_filter']
+    update_timestep = params['update_every_n_steps']
+    seed = params['seed']
+    log_interval = 1000
+    gif_interval = 500000
+    n_random_actions = params['n_random_actions']
+    n_evals = params['n_evals']
+    n_collect_steps = params['n_collect_steps']
+    use_statefilter = params['obs_filter']
     save_model = params['save_model']
+
+    assert n_collect_steps > agent.batchsize, "We must initially collect as many steps as the batch size!"
 
     avg_length = 0
     time_step = 0
@@ -53,7 +57,6 @@ def train_agent_model_free(agent, env, params):
     while samples_number < 3e7:
         time_step = 0
         episode_reward = 0
-        env.reset()
         i_episode += 1
         log_episode += 1
         state = env.reset()
@@ -79,11 +82,11 @@ def train_agent_model_free(agent, env, params):
                 state_filter.update(state)
             episode_reward += reward
             # update if it's time
-            if cumulative_timestep % update_timestep == 0 and cumulative_timestep > agent.batchsize:
+            if cumulative_timestep % update_timestep == 0 and cumulative_timestep > n_collect_steps:
                 q1_loss, q2_loss, pi_loss, a_loss = agent.optimize(update_timestep, state_filter=state_filter)
                 n_updates += 1
             # logging
-            if cumulative_timestep % log_interval == 0:
+            if cumulative_timestep % log_interval == 0 and cumulative_timestep > n_collect_steps:
                 writer.add_scalar('Loss/Q-func_1', q1_loss, n_updates)
                 writer.add_scalar('Loss/Q-func_2', q2_loss, n_updates)
                 writer.add_scalar('Loss/policy', pi_loss, n_updates)
@@ -91,7 +94,7 @@ def train_agent_model_free(agent, env, params):
                 writer.add_scalar('Values/alpha', np.exp(agent.log_alpha.item()), n_updates)
                 avg_length = np.mean(episode_steps)
                 running_reward = np.mean(episode_rewards)
-                eval_reward = evaluate_agent(env, agent, state_filter)
+                eval_reward = evaluate_agent(env, agent, state_filter, n_starts=n_evals)
                 writer.add_scalar('Reward/Train', running_reward, cumulative_timestep)
                 writer.add_scalar('Reward/Test', eval_reward, cumulative_timestep)
                 print('Episode {} \t Samples {} \t Avg length: {} \t Test reward: {} \t Train reward: {} \t Number of Policy Updates: {}'.format(i_episode, samples_number, avg_length, eval_reward, running_reward, n_updates))
@@ -127,6 +130,8 @@ def main():
     parser.add_argument('--use_obs_filter', dest='obs_filter', action='store_true')
     parser.add_argument('--update_every_n_steps', type=int, default=1)
     parser.add_argument('--n_random_actions', type=int, default=10000)
+    parser.add_argument('--n_collect_steps', type=int, default=1000)
+    parser.add_argument('--n_evals', type=int, default=1)
     parser.add_argument('--save_model', dest='save_model', action='store_true')
     parser.set_defaults(obs_filter=False)
     parser.set_defaults(save_model=False)

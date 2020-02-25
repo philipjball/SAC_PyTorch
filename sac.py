@@ -67,9 +67,8 @@ class DoubleQFunc(nn.Module):
 
 class SAC_Agent:
 
-    def __init__(self, seed, state_dim, action_dim, lr=3e-4, gamma=0.99, epochs=1, tau=5e-3, batchsize=256, hidden_size=256, update_interval=1):
+    def __init__(self, seed, state_dim, action_dim, lr=3e-4, gamma=0.99, tau=5e-3, batchsize=256, hidden_size=256, update_interval=1):
         self.gamma = gamma
-        self.epochs = epochs
         self.tau = tau
         self.target_entropy = -action_dim
         self.batchsize = batchsize
@@ -133,47 +132,46 @@ class SAC_Agent:
         return policy_loss, temp_loss
 
     def optimize(self, n_updates, state_filter=None):
-        for _ in range(self.epochs):
-            q1_loss, q2_loss, pi_loss, a_loss = 0, 0, 0, 0
-            for i in range(n_updates):
-                samples = self.replay_pool.sample(self.batchsize)
+        q1_loss, q2_loss, pi_loss, a_loss = 0, 0, 0, 0
+        for i in range(n_updates):
+            samples = self.replay_pool.sample(self.batchsize)
 
-                if state_filter:
-                    state_batch = torch.FloatTensor(state_filter(samples.state)).to(device)
-                    nextstate_batch = torch.FloatTensor(state_filter(samples.nextstate)).to(device)
-                else:
-                    state_batch = torch.FloatTensor(samples.state).to(device)
-                    nextstate_batch = torch.FloatTensor(samples.nextstate).to(device)
-                action_batch = torch.FloatTensor(samples.action).to(device)
-                reward_batch = torch.FloatTensor(samples.reward).to(device).unsqueeze(1)
-                done_batch = torch.FloatTensor(samples.done).to(device).unsqueeze(1)
-                
-                # update q-funcs
-                q1_loss_step, q2_loss_step = self.update_q_functions(state_batch, action_batch, reward_batch, nextstate_batch, done_batch)
-                q_loss_step = q1_loss_step + q2_loss_step
-                self.q_optimizer.zero_grad()
-                q_loss_step.backward()
-                self.q_optimizer.step()
+            if state_filter:
+                state_batch = torch.FloatTensor(state_filter(samples.state)).to(device)
+                nextstate_batch = torch.FloatTensor(state_filter(samples.nextstate)).to(device)
+            else:
+                state_batch = torch.FloatTensor(samples.state).to(device)
+                nextstate_batch = torch.FloatTensor(samples.nextstate).to(device)
+            action_batch = torch.FloatTensor(samples.action).to(device)
+            reward_batch = torch.FloatTensor(samples.reward).to(device).unsqueeze(1)
+            done_batch = torch.FloatTensor(samples.done).to(device).unsqueeze(1)
+            
+            # update q-funcs
+            q1_loss_step, q2_loss_step = self.update_q_functions(state_batch, action_batch, reward_batch, nextstate_batch, done_batch)
+            q_loss_step = q1_loss_step + q2_loss_step
+            self.q_optimizer.zero_grad()
+            q_loss_step.backward()
+            self.q_optimizer.step()
 
-                # update policy and temperature parameter
-                for p in self.q_funcs.parameters():
-                    p.requires_grad = False
-                pi_loss_step, a_loss_step = self.update_policy_and_temp(state_batch)
-                self.policy_optimizer.zero_grad()
-                pi_loss_step.backward()
-                self.policy_optimizer.step()
-                self.temp_optimizer.zero_grad()
-                a_loss_step.backward()
-                self.temp_optimizer.step()
-                for p in self.q_funcs.parameters():
-                    p.requires_grad = True
+            # update policy and temperature parameter
+            for p in self.q_funcs.parameters():
+                p.requires_grad = False
+            pi_loss_step, a_loss_step = self.update_policy_and_temp(state_batch)
+            self.policy_optimizer.zero_grad()
+            pi_loss_step.backward()
+            self.policy_optimizer.step()
+            self.temp_optimizer.zero_grad()
+            a_loss_step.backward()
+            self.temp_optimizer.step()
+            for p in self.q_funcs.parameters():
+                p.requires_grad = True
 
-                self.alpha = self.log_alpha.exp()
+            self.alpha = self.log_alpha.exp()
 
-                q1_loss += q1_loss_step.detach().item()
-                q2_loss += q2_loss_step.detach().item()
-                pi_loss += pi_loss_step.detach().item()
-                a_loss += a_loss_step.detach().item()
-                if i // self.update_interval == 0:
-                    self.update_target()
+            q1_loss += q1_loss_step.detach().item()
+            q2_loss += q2_loss_step.detach().item()
+            pi_loss += pi_loss_step.detach().item()
+            a_loss += a_loss_step.detach().item()
+            if i % self.update_interval == 0:
+                self.update_target()
         return q1_loss, q2_loss, pi_loss, a_loss
