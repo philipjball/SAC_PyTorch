@@ -26,6 +26,6 @@ Single seed runs (smoothed)
 
 | Graph                                 |  Gif
 :--------------------------------------:|:------------------------------------:
-| ![example](./assets/HalfCheetah.png)  | ![example](./assets/HalfCheetah.gif)
-| ![example](./assets/Hopper.png)       | ![example](./assets/Hopper.gif)
-| ![example](./assets/Walker2D.png)     | ![example](./assets/Walker2D.gif)
+| ![example](./assets/HalfCheetah.png)  | ![example](./assets/HalfCheetahO.gif)
+| ![example](./assets/Hopper.png)       | ![example](./assets/HopperO.gif)
+| ![example](./assets/Walker2D.png)     | ![example](./assets/Walker2DO.gif)
