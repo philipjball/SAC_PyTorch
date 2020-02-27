@@ -30,10 +30,18 @@ And Here's a GIF of HalfCheetah-v2:
 
 ![example](./assets/HalfCheetah-v2_2300000-small.gif)
 
-Hopper one seed (doesn't match paper unfortunately):
+Hopper over one seed:
 
 ![example](./assets/Hopper.png)
 
 And Here's a GIF of Hopper-v2:
 
 ![example](./assets/Hopper-v2_1467651-small.gif)
+
+Walker2D over one seed:
+
+![example](./assets/Walker2D.png)
+
+And Here's a GIF of Hopper-v2:
+
+![example](./assets/Walker2d-v2_2638250-small.gif)
