@@ -22,26 +22,10 @@ for default args. Changeable args are:
 
 ## Results
 
-Gets the insane HalfCheetah result, tops out around 17,000:
+Single seed runs (smoothed)
 
-![example](./assets/HalfCheetah.png)
-
-And Here's a GIF of HalfCheetah-v2:
-
-![example](./assets/HalfCheetah-v2_2300000-small.gif)
-
-Hopper over one seed:
-
-![example](./assets/Hopper.png)
-
-And Here's a GIF of Hopper-v2:
-
-![example](./assets/Hopper-v2_1467651-small.gif)
-
-Walker2D over one seed:
-
-![example](./assets/Walker2D.png)
-
-And Here's a GIF of Hopper-v2:
-
-![example](./assets/Walker2d-v2_2638250-small.gif)
+| Graph                                 |  Gif
+:--------------------------------------:|:------------------------------------:
+| ![example](./assets/HalfCheetah.png)  | ![example](./assets/HalfCheetah.gif)
+| ![example](./assets/Hopper.png)       | ![example](./assets/Hopper.gif)
+| ![example](./assets/Walker2D.png)     | ![example](./assets/Walker2D.gif)
