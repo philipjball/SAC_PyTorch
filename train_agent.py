@@ -99,7 +99,7 @@ def train_agent_model_free(agent, env, params):
                 writer.add_scalar('Reward/Test', eval_reward, cumulative_timestep)
                 print('Episode {} \t Samples {} \t Avg length: {} \t Test reward: {} \t Train reward: {} \t Number of Policy Updates: {}'.format(i_episode, samples_number, avg_length, eval_reward, running_reward, n_updates))
                 episode_steps = []
-                running_reward = []
+                episode_rewards = []
             if cumulative_timestep % gif_interval == 0:
                 make_gif(agent, env, cumulative_timestep, state_filter)
                 if save_model:
