@@ -103,7 +103,7 @@ class SAC_Agent:
             action, _, mean = self.policy(torch.Tensor(state).view(1,-1).to(device))
         if deterministic:
             return mean.squeeze().cpu().numpy()
-        return action.squeeze().cpu().numpy()
+        return np.atleast_1d(action.squeeze().cpu().numpy())
 
     def update_target(self):
         """moving average update of target networks"""
