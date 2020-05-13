@@ -56,7 +56,7 @@ def train_agent_model_free(agent, env, params):
 
     writer = SummaryWriter(log_dir=params['experiment_name'])
 
-    while samples_number < 10000:
+    while samples_number < total_steps:
         time_step = 0
         episode_reward = 0
         i_episode += 1
