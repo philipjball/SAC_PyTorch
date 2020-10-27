@@ -5,6 +5,7 @@ from collections import deque
 
 import gym
 from gym.wrappers import RescaleAction
+import dmc2gym
 import numpy as np
 import pandas as pd
 import torch
@@ -25,6 +26,7 @@ def train_agent_model_free(agent, env, params):
     n_collect_steps = params['n_collect_steps']
     use_statefilter = params['obs_filter']
     save_model = params['save_model']
+    total_steps = params['total_steps']
 
     assert n_collect_steps > agent.batchsize, "We must initially collect as many steps as the batch size!"
 
@@ -52,9 +54,9 @@ def train_agent_model_free(agent, env, params):
 
     max_steps = env.spec.max_episode_steps
 
-    writer = SummaryWriter()
+    writer = SummaryWriter(log_dir=params['experiment_name'])
 
-    while samples_number < 3e7:
+    while samples_number < total_steps:
         time_step = 0
         episode_reward = 0
         i_episode += 1
@@ -132,7 +134,10 @@ def main():
     parser.add_argument('--n_random_actions', type=int, default=10000)
     parser.add_argument('--n_collect_steps', type=int, default=1000)
     parser.add_argument('--n_evals', type=int, default=1)
+    parser.add_argument('--experiment_name', type=str, default='')
+    parser.add_argument('--make_gif', dest='make_gif', action='store_true')
     parser.add_argument('--save_model', dest='save_model', action='store_true')
+    parser.add_argument('--total_steps', type=int, default=int(1e7))
     parser.set_defaults(obs_filter=False)
     parser.set_defaults(save_model=False)
 
@@ -140,7 +145,15 @@ def main():
     params = vars(args)
 
     seed = params['seed']
-    env = gym.make(params['env'])
+    all_envs = gym.envs.registry.all()
+    available_envs = [env_spec.id for env_spec in all_envs]
+    env_name = params['env']
+    if env_name in available_envs:
+        env = gym.make(params['env'])
+    elif env_name=='cartpole-swingup_sparse':
+        env = dmc2gym.make(domain_name='cartpole', task_name='swingup_sparse', seed=0)
+    else:
+        raise Exception("Invalid environment name")
     env = RescaleAction(env, -1, 1)
 
     state_dim = env.observation_space.shape[0]
