@@ -4,10 +4,10 @@ import multiprocessing
 import subprocess
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--env', type=str, default='cartpole-swingup_sparse')   ## only works properly for HalfCheetah and Ant
+parser.add_argument('--env', type=str, default='HalfCheetah-v2')
 parser.add_argument('--experiment_name', type=str, default='')
 parser.add_argument('--seeds5to9', dest='seeds5to9', action='store_true')
-parser.add_argument('--total_steps', type=int, default=200000)
+parser.add_argument('--total_steps', type=int, default=int(3e6))
 parser.set_defaults(seeds5to9=False)
 
 args = parser.parse_args()
