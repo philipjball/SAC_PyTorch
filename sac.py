@@ -67,10 +67,10 @@ class DoubleQFunc(nn.Module):
 
 class SAC_Agent:
 
-    def __init__(self, seed, state_dim, action_dim, lr=3e-4, gamma=0.99, tau=5e-3, batchsize=256, hidden_size=256, update_interval=1):
+    def __init__(self, seed, state_dim, action_dim, lr=3e-4, gamma=0.99, tau=5e-3, batchsize=256, hidden_size=256, update_interval=1, buffer_size=int(1e6), target_entropy=None):
         self.gamma = gamma
         self.tau = tau
-        self.target_entropy = -action_dim
+        self.target_entropy = target_entropy if target_entropy else -action_dim
         self.batchsize = batchsize
         self.update_interval = update_interval
 
@@ -93,7 +93,7 @@ class SAC_Agent:
         self.policy_optimizer = torch.optim.Adam(self.policy.parameters(), lr=lr)
         self.temp_optimizer = torch.optim.Adam([self.log_alpha], lr=lr)
 
-        self.replay_pool = ReplayPool(capacity=int(1e6))
+        self.replay_pool = ReplayPool(capacity=buffer_size)
     
     def get_action(self, state, state_filter=None, deterministic=False):
         if state_filter:
