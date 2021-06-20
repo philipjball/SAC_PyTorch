@@ -67,10 +67,10 @@ class DoubleQFunc(nn.Module):
 
 class SAC_Agent:
 
-    def __init__(self, seed, state_dim, action_dim, lr=3e-4, gamma=0.99, tau=5e-3, batchsize=256, hidden_size=256, update_interval=1):
+    def __init__(self, seed, state_dim, action_dim, lr=3e-4, gamma=0.99, tau=5e-3, batchsize=256, hidden_size=256, update_interval=1, buffer_size=int(1e6), target_entropy=None):
         self.gamma = gamma
         self.tau = tau
-        self.target_entropy = -action_dim
+        self.target_entropy = target_entropy if target_entropy else -action_dim
         self.batchsize = batchsize
         self.update_interval = update_interval
 
@@ -88,7 +88,6 @@ class SAC_Agent:
 
         # aka temperature
         self.log_alpha = torch.zeros(1, requires_grad=True, device=device)
-        self.alpha = self.log_alpha.exp()
 
         self.q_optimizer = torch.optim.Adam(self.q_funcs.parameters(), lr=lr)
         self.policy_optimizer = torch.optim.Adam(self.policy.parameters(), lr=lr)
@@ -128,7 +127,7 @@ class SAC_Agent:
         q_b1, q_b2 = self.q_funcs(state_batch, action_batch)
         qval_batch = torch.min(q_b1, q_b2)
         policy_loss = (self.alpha * logprobs_batch - qval_batch).mean()
-        temp_loss = -self.log_alpha * (logprobs_batch.detach() + self.target_entropy).mean()
+        temp_loss = -self.alpha * (logprobs_batch.detach() + self.target_entropy).mean()
         return policy_loss, temp_loss
 
     def optimize(self, n_updates, state_filter=None):
@@ -166,8 +165,6 @@ class SAC_Agent:
             for p in self.q_funcs.parameters():
                 p.requires_grad = True
 
-            self.alpha = self.log_alpha.exp()
-
             q1_loss += q1_loss_step.detach().item()
             q2_loss += q2_loss_step.detach().item()
             pi_loss += pi_loss_step.detach().item()
@@ -175,3 +172,7 @@ class SAC_Agent:
             if i % self.update_interval == 0:
                 self.update_target()
         return q1_loss, q2_loss, pi_loss, a_loss
+
+    @property
+    def alpha(self):
+        return self.log_alpha.exp()
