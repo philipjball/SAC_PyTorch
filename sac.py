@@ -94,7 +94,7 @@ class SAC_Agent:
         self.policy_optimizer = torch.optim.Adam(self.policy.parameters(), lr=lr)
         self.temp_optimizer = torch.optim.Adam([self.log_alpha], lr=lr)
 
-        self.replay_pool = ReplayPool(capacity=int(1e6))
+        self.replay_pool = ReplayPool(action_dim=action_dim, state_dim=state_dim, capacity=int(1e6))
     
     def get_action(self, state, state_filter=None, deterministic=False):
         if state_filter:
@@ -144,7 +144,7 @@ class SAC_Agent:
                 nextstate_batch = torch.FloatTensor(samples.nextstate).to(device)
             action_batch = torch.FloatTensor(samples.action).to(device)
             reward_batch = torch.FloatTensor(samples.reward).to(device).unsqueeze(1)
-            done_batch = torch.FloatTensor(samples.done).to(device).unsqueeze(1)
+            done_batch = torch.FloatTensor(samples.real_done).to(device).unsqueeze(1)
             
             # update q-funcs
             q1_loss_step, q2_loss_step = self.update_q_functions(state_batch, action_batch, reward_batch, nextstate_batch, done_batch)
