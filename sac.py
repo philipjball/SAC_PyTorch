@@ -95,13 +95,15 @@ class SAC_Agent:
 
         self.replay_pool = ReplayPool(action_dim=action_dim, state_dim=state_dim, capacity=int(1e6))
     
-    def get_action(self, state, state_filter=None, deterministic=False):
+    def get_action(self, state, state_filter=None, deterministic=False, random=False):
         if state_filter:
             state = state_filter(state)
         with torch.no_grad():
             action, _, mean = self.policy(torch.Tensor(state).view(1,-1).to(device))
         if deterministic:
             return mean.squeeze().cpu().numpy()
+        if random:
+            action.uniform_(-1.0, 1.0)
         return np.atleast_1d(action.squeeze().cpu().numpy())
 
     def update_target(self):
@@ -139,11 +141,11 @@ class SAC_Agent:
                 state_batch = torch.FloatTensor(state_filter(samples.state)).to(device)
                 nextstate_batch = torch.FloatTensor(state_filter(samples.nextstate)).to(device)
             else:
-                state_batch = torch.FloatTensor(samples.state).to(device)
-                nextstate_batch = torch.FloatTensor(samples.nextstate).to(device)
-            action_batch = torch.FloatTensor(samples.action).to(device)
-            reward_batch = torch.FloatTensor(samples.reward).to(device).unsqueeze(1)
-            done_batch = torch.FloatTensor(samples.real_done).to(device).unsqueeze(1)
+                state_batch = torch.FloatTensor(np.array(samples.state)).to(device)
+                nextstate_batch = torch.FloatTensor(np.array(samples.nextstate)).to(device)
+            action_batch = torch.FloatTensor(np.array(samples.action)).to(device)
+            reward_batch = torch.FloatTensor(np.array(samples.reward)).to(device).unsqueeze(1)
+            done_batch = torch.FloatTensor(np.array(samples.real_done)).to(device).unsqueeze(1)
             
             # update q-funcs
             q1_loss_step, q2_loss_step = self.update_q_functions(state_batch, action_batch, reward_batch, nextstate_batch, done_batch)

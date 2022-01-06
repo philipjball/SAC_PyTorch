@@ -1,7 +1,5 @@
-import itertools
 import math
 import os
-import random
 from collections import deque, namedtuple
 
 import numpy as np
@@ -11,6 +9,8 @@ from numpy.random import default_rng
 from torch.distributions import constraints
 from torch.distributions.transforms import Transform
 from torch.nn.functional import softplus
+
+from dmc_utils import ExtendedTimeStep
 
 Transition = namedtuple('Transition', ('state', 'action', 'reward', 'nextstate', 'real_done'))
 
@@ -145,38 +145,11 @@ class TanhTransform(Transform):
         return 2. * (math.log(2.) - x - softplus(-2. * x))
 
 
-# Code courtesy of JPH: https://github.com/jparkerholder
-def make_gif(policy, env, step_count, state_filter, maxsteps=1000):
-    envname = env.spec.id
-    gif_name = '_'.join([envname, str(step_count)])
-    state = env.reset()
-    done = False
-    steps = []
-    rewards = []
-    t = 0
-    while (not done) & (t< maxsteps):
-        s = env.render('rgb_array')
-        steps.append(s)
-        action = policy.get_action(state, state_filter=state_filter, deterministic=True)
-        action = np.clip(action, env.action_space.low[0], env.action_space.high[0])
-        action = action.reshape(len(action), )
-        state, reward, done, _ = env.step(action)
-        rewards.append(reward)
-        t +=1
-    print('Final reward :', np.sum(rewards))
-    clip = ImageSequenceClip(steps, fps=30)
-    if not os.path.isdir('gifs'):
-        os.makedirs('gifs')
-    clip.write_gif('gifs/{}.gif'.format(gif_name), fps=30)
+def make_checkpoint(agent, step_count, experiment_dir):
 
-
-def make_checkpoint(agent, step_count, env_name):
     q_funcs, target_q_funcs, policy, log_alpha = agent.q_funcs, agent.target_q_funcs, agent.policy, agent.log_alpha
     
-    save_path = "checkpoints/model-{}.pt".format(step_count)
-
-    if not os.path.isdir('checkpoints'):
-        os.makedirs('checkpoints')
+    save_path = os.path.join(experiment_dir, 'checkpoint-{}.pt'.format(int(step_count)))
 
     torch.save({
         'double_q_state_dict': q_funcs.state_dict(),
@@ -184,3 +157,35 @@ def make_checkpoint(agent, step_count, env_name):
         'policy_state_dict': policy.state_dict(),
         'log_alpha_state_dict': log_alpha
     }, save_path)
+
+
+def timestep_to_transition(prev_time_step: ExtendedTimeStep, time_step: ExtendedTimeStep):
+    state = observation_to_state(prev_time_step.observation)
+    action = time_step.action
+    reward = time_step.reward
+    nextstate = observation_to_state(time_step.observation)
+    real_done = time_step.discount == .0
+    return Transition(state=state, action=action, reward=reward, nextstate=nextstate, real_done=real_done)
+
+
+def observation_to_state(observation):
+    state = []
+    for k,v in observation.items():
+        v = np.atleast_1d(v)
+        state.append(v)
+    return np.concatenate(state, axis=-1)
+
+
+def obs_spec_to_dim(spec):
+    tot_dim = 0
+    for k,s in spec.items():
+        tot_dim += np.int(np.prod(s.shape))
+    return tot_dim
+
+
+def get_pixel_timestep(timestep, env, pixel_hw=84):
+    domain = env.physics.model.name
+    camera_id = dict(quadruped=2).get(domain, 0)
+    render_kwargs = dict(height=pixel_hw, width=pixel_hw, camera_id=camera_id)
+    pixels = env.physics.render(**render_kwargs)
+    return timestep._replace(observation=pixels)
