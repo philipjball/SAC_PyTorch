@@ -93,9 +93,9 @@ class SAC_Agent:
         self.policy_optimizer = torch.optim.Adam(self.policy.parameters(), lr=lr)
         self.temp_optimizer = torch.optim.Adam([self.log_alpha], lr=lr)
 
-        self.replay_pool = ReplayPool(action_dim=action_dim, state_dim=state_dim, capacity=int(1e6))
+        self.replay_pool = ReplayPool(action_dim=action_dim, state_dim=state_dim, capacity=buffer_size, seed=seed)
     
-    def get_action(self, state, state_filter=None, deterministic=False, random=False):
+    def get_action(self, state, state_filter=None, deterministic=False, random=False, gaussian=False):
         if state_filter:
             state = state_filter(state)
         with torch.no_grad():
@@ -178,3 +178,11 @@ class SAC_Agent:
     @property
     def alpha(self):
         return self.log_alpha.exp()
+
+    def load_checkpoint(self, checkpoint_location: str):
+        state_dicts = torch.load(checkpoint_location)
+        self.q_funcs.load_state_dict(state_dicts['double_q_state_dict'])
+        self.target_q_funcs.load_state_dict(state_dicts['target_double_q_state_dict'])
+        self.policy.load_state_dict(state_dicts['policy_state_dict'])
+        self.log_alpha = state_dicts['log_alpha_state_dict']
+        print("Checkpoint at {} loaded!".format(checkpoint_location))

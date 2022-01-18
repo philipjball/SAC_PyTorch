@@ -10,7 +10,7 @@ from torch.distributions import constraints
 from torch.distributions.transforms import Transform
 from torch.nn.functional import softplus
 
-from dmc_utils import ExtendedTimeStep
+from dmc import ExtendedTimeStep
 
 Transition = namedtuple('Transition', ('state', 'action', 'reward', 'nextstate', 'real_done'))
 
@@ -49,14 +49,14 @@ class MeanStdevFilter():
 
 class ReplayPool:
 
-    def __init__(self, action_dim, state_dim, capacity=1e6):
+    def __init__(self, action_dim, state_dim, seed, capacity=1e6):
         self.capacity = int(capacity)
         self._action_dim = action_dim
         self._state_dim = state_dim
         self._pointer = 0
         self._size = 0
         self._init_memory()
-        self._rng = default_rng()
+        self._rng = default_rng(seed)
 
     def _init_memory(self):
         self._memory = {
@@ -83,7 +83,7 @@ class ReplayPool:
         sample = {k: tuple(v[idx]) for k,v in self._memory.items()}
         return Transition(**sample)
 
-    def sample(self, batch_size: int, unique: bool = True):
+    def sample(self, batch_size: int, unique: bool=False):
         idx = np.random.randint(0, self._size, batch_size) if not unique else self._rng.choice(self._size, size=batch_size, replace=False)
         return self._return_from_idx(idx)
 
@@ -187,5 +187,31 @@ def get_pixel_timestep(timestep, env, pixel_hw=84):
     domain = env.physics.model.name
     camera_id = dict(quadruped=2).get(domain, 0)
     render_kwargs = dict(height=pixel_hw, width=pixel_hw, camera_id=camera_id)
-    pixels = env.physics.render(**render_kwargs)
+    pixels = env.physics.render(**render_kwargs).transpose(2, 0, 1)
     return timestep._replace(observation=pixels)
+
+
+class OfflineDataContainer:
+    def __init__(self):
+        self._dic = {k: [] for k in ExtendedTimeStep._fields}
+
+    def add_timestep(self, time_step: ExtendedTimeStep):
+        for k in self._dic:
+            if k != 'step_type':
+                self._dic[k].append(time_step[k])
+            else:
+                if time_step.first():
+                    ts_type = 0
+                elif time_step.mid():
+                    ts_type = 1
+                elif time_step.last():
+                    ts_type = 2
+                else:
+                    raise Exception
+                self._dic[k].append(ts_type)
+
+    def return_dict(self):
+        return {k: np.array(v) for k,v in self._dic.items()}
+
+    def __len__(self):
+        return len(self._dic['reward'])
