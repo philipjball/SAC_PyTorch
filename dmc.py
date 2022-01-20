@@ -123,7 +123,7 @@ class ExtendedTimeStepWrapper(dm_env.Environment):
         return getattr(self._env, name)
 
 
-def make(name, action_repeat, seed, distracting=False, difficulty='easy'):
+def make(name, action_repeat, seed, distracting=False, difficulty='easy', multitask_level=None, multitask_name=None):
     domain, task = name.split('_', 1)
     # overwrite cup to ball_in_cup
     domain = dict(cup='ball_in_cup').get(domain, domain)
@@ -136,6 +136,15 @@ def make(name, action_repeat, seed, distracting=False, difficulty='easy'):
     else:
         name = f'{domain}_{task}_vision'
         env = manipulation.load(name, seed=seed)
+    if multitask_level is not None:
+        assert multitask_name is not None, "need to specity which task, e.g. torso_length"
+        import fb_mtenv_dmc
+        env = fb_mtenv_dmc.load(
+            domain,
+            task,
+            task_kwargs={'xml_file_id': "{}_{}".format(multitask_name, multitask_level)},
+            visualize_reward=False
+        )
     # add wrappers
     env = ActionDTypeWrapper(env, np.float32)
     env = ActionRepeatWrapper(env, action_repeat)

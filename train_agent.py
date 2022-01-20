@@ -162,6 +162,8 @@ def main():
     parser.add_argument('--save_offline_replay_dataset', dest='save_offline_replay_dataset', action='store_true')
     parser.add_argument('--offline_replay_dataset_size', type=int, default=100_000)
     parser.add_argument('--pixel_hw', type=int, default=64, choices=[64,84])
+    parser.add_argument('--multitask_level', type=int, default=None, choices=[1,2,3,4,5,6,7,8,9,10])
+    parser.add_argument('--multitask_name', type=str, default=None)
     parser.set_defaults(save_model=False)
     parser.set_defaults(save_offline_replay_dataset=False)
 
@@ -170,7 +172,7 @@ def main():
 
     seed = params['seed']
     env_name = params['env']
-    env = dmc.make(env_name, 2, seed)
+    env = dmc.make(env_name, 2, seed, multitask_level=params['multitask_level'], multitask_name=params['multitask_name'])
     state_dim = obs_spec_to_dim(env.observation_spec())
     action_dim = int(env.action_spec().shape[-1])
     now = datetime.utcnow()
