@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 from collections import deque
+from textwrap import wrap
 from typing import Any, NamedTuple
 
 import dm_env
@@ -10,6 +11,7 @@ import numpy as np
 from dm_control import manipulation, suite
 from dm_control.suite.wrappers import action_scale, pixels
 from dm_env import StepType, specs
+from distracting_control.suite import wrap_distracting
 
 
 class ExtendedTimeStep(NamedTuple):
@@ -121,8 +123,7 @@ class ExtendedTimeStepWrapper(dm_env.Environment):
         return getattr(self._env, name)
 
 
-def make(name, action_repeat, seed, pixel_hw=84):
-    pixel_hw = pixel_hw
+def make(name, action_repeat, seed, distracting=False, difficulty='easy'):
     domain, task = name.split('_', 1)
     # overwrite cup to ball_in_cup
     domain = dict(cup='ball_in_cup').get(domain, domain)
@@ -140,4 +141,15 @@ def make(name, action_repeat, seed, pixel_hw=84):
     env = ActionRepeatWrapper(env, action_repeat)
     env = action_scale.Wrapper(env, minimum=-1.0, maximum=+1.0)
     env = ExtendedTimeStepWrapper(env)
+    if distracting:
+        unique_int = int.from_bytes(f'{difficulty}_0'.encode(), 'little') % (2**31)
+        env = wrap_distracting(
+            env,
+            difficulty,
+            domain_name=domain,
+            fixed_distraction=True,
+            background_seed=unique_int,
+            camera_seed=unique_int,
+            color_seed=unique_int
+        )
     return env

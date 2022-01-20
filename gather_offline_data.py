@@ -50,19 +50,26 @@ def main():
     parser.add_argument('--agent_checkpoint', type=str, default=None)
     parser.add_argument('--dataset_size', type=int, default=100000)
     parser.add_argument('--action_dist', type=str, default='stochastic', choices=['stochastic', 'deterministic', 'gaussian'])
-    parser.add_argument('--dataset_type', type=str, choices=['random','medium', 'expert'])
+    parser.add_argument('--dataset_type', type=str, choices=['random', 'medium', 'expert'])
     parser.add_argument('--pixel_hw', type=int, choices=[64, 84], default=64)
+    parser.add_argument('--distracting', dest='distracting', action='store_true')
+    parser.add_argument('--distracting_difficulty', type=str, choices=['easy', 'medium', 'hard'], default=None)
     parser.set_defaults(deterministic=False)
+    parser.set_defaults(distracting=False)
 
     args = parser.parse_args()
     params = vars(args)
 
     seed = params['seed']
     env_name = params['env']
-    env = dmc.make(env_name, 2, seed)
+    env = dmc.make(env_name, 2, seed, params['distracting'], params['distracting_difficulty'])
     state_dim = obs_spec_to_dim(env.observation_spec())
     action_dim = int(env.action_spec().shape[-1])
-    offline_dataset_dir = os.path.join('offline_data', '_'.join([params['env'], '{}'.format(params['dataset_type'])]), params['action_dist'], 'seed{}'.format(params['seed']), '{}px'.format(params['pixel_hw']))
+    if params['distracting']:
+        dataset_type = '_'.join([params['dataset_type'], 'distracting', params['distracting_difficulty']])
+    else:
+        dataset_type = params['dataset_type']
+    offline_dataset_dir = os.path.join('offline_data', '_'.join([params['env'], '{}'.format(dataset_type)]), params['action_dist'], 'seed{}'.format(params['seed']), '{}px'.format(params['pixel_hw']))
     os.makedirs(offline_dataset_dir, exist_ok=True)
 
     agent = SAC_Agent(seed, state_dim, action_dim)
