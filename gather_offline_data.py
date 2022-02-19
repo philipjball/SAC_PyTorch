@@ -54,19 +54,26 @@ def main():
     parser.add_argument('--pixel_hw', type=int, choices=[64, 84], default=64)
     parser.add_argument('--distracting', dest='distracting', action='store_true')
     parser.add_argument('--distracting_difficulty', type=str, choices=['easy', 'medium', 'hard'], default=None)
+    parser.add_argument('--multitask', dest='multitask', action='store_true')
+    parser.add_argument('--multitask_task_name', type=str, choices=['len', 'torso_length'])
+    parser.add_argument('--multitask_level', type=int, choices=[1,2,3,4,5,6,7,8])
+    parser.add_argument('--num_shards', type=int, default=4)
     parser.set_defaults(deterministic=False)
     parser.set_defaults(distracting=False)
-
+    parser.set_defaults(multitask=False)
     args = parser.parse_args()
     params = vars(args)
 
+    assert not (params['multitask'] and params['distracting']), "Can't do both multitask and distracting unfortunately"
     seed = params['seed']
     env_name = params['env']
-    env = dmc.make(env_name, 2, seed, params['distracting'], params['distracting_difficulty'])
+    env = dmc.make(env_name, 2, seed, params['distracting'], params['distracting_difficulty'], params['multitask_level'], params['multitask_task_name'])
     state_dim = obs_spec_to_dim(env.observation_spec())
     action_dim = int(env.action_spec().shape[-1])
     if params['distracting']:
         dataset_type = '_'.join([params['dataset_type'], 'distracting', params['distracting_difficulty']])
+    elif params['multitask']:
+        dataset_type = '_'.join([params['dataset_type'], 'multitask', params['multitask_task_name'], str(params['multitask_level'])])
     else:
         dataset_type = params['dataset_type']
     offline_dataset_dir = os.path.join('offline_data', '_'.join([params['env'], '{}'.format(dataset_type)]), params['action_dist'], 'seed{}'.format(params['seed']), '{}px'.format(params['pixel_hw']))
@@ -85,7 +92,7 @@ def main():
     torch.manual_seed(seed)
     np.random.seed(seed)
 
-    num_shards = 4
+    num_shards = params['num_shards']
 
     for i in range(num_shards):
         offline_data, reward = get_offline_dataset_shard(
